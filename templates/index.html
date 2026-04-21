@@ -1,0 +1,209 @@
+--- FILE: /qa_rag_app/templates/index.html ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA RAG Application</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Document Question & Answering</h1>
+            <p class="subtitle">Upload a document and ask questions using AI-powered search</p>
+        </header>
+
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <h2>1. Upload Your Document</h2>
+            
+            <div class="input-group">
+                <label for="textInput">Paste Document Text:</label>
+                <textarea 
+                    id="textInput" 
+                    placeholder="Paste your document text here..."
+                    rows="6"
+                ></textarea>
+            </div>
+
+            <div class="divider">OR</div>
+
+            <div class="input-group">
+                <label for="fileInput">Upload File (.pdf or .txt):</label>
+                <input 
+                    type="file" 
+                    id="fileInput" 
+                    accept=".pdf,.txt"
+                    class="file-input"
+                >
+            </div>
+
+            <button id="uploadBtn" class="btn btn-primary">
+                Upload & Process Document
+            </button>
+
+            <div id="uploadStatus" class="status-message"></div>
+        </section>
+
+        <!-- QA Section (hidden until document is uploaded) -->
+        <section id="qaSection" class="qa-section hidden">
+            <h2>2. Ask Your Questions</h2>
+            <p class="info-text" id="chunkInfo"></p>
+
+            <div class="input-group">
+                <label for="questionInput">Your Question:</label>
+                <input 
+                    type="text" 
+                    id="questionInput" 
+                    placeholder="What would you like to know about the document?"
+                    class="question-input"
+                >
+            </div>
+
+            <button id="askBtn" class="btn btn-primary">Get Answer</button>
+
+            <div id="loadingSpinner" class="spinner hidden"></div>
+
+            <div id="answerBox" class="answer-box hidden">
+                <h3>Answer:</h3>
+                <div id="answerContent"></div>
+            </div>
+
+            <div id="errorBox" class="error-box hidden"></div>
+        </section>
+    </div>
+
+    <script>
+        const textInput = document.getElementById("textInput");
+        const fileInput = document.getElementById("fileInput");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const uploadStatus = document.getElementById("uploadStatus");
+        const qaSection = document.getElementById("qaSection");
+        const questionInput = document.getElementById("questionInput");
+        const askBtn = document.getElementById("askBtn");
+        const loadingSpinner = document.getElementById("loadingSpinner");
+        const answerBox = document.getElementById("answerBox");
+        const answerContent = document.getElementById("answerContent");
+        const chunkInfo = document.getElementById("chunkInfo");
+        const errorBox = document.getElementById("errorBox");
+
+        // Handle document upload
+        uploadBtn.addEventListener("click", async () => {
+            clearMessages();
+            
+            let formData = new FormData();
+            
+            // Check if file was selected
+            if (fileInput.files.length > 0) {
+                formData.append("file", fileInput.files[0]);
+            } else if (textInput.value.trim()) {
+                // Use JSON for text input
+                const response = await fetch("/upload", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: textInput.value.trim() })
+                });
+                handleUploadResponse(response);
+                return;
+            } else {
+                showUploadError("Please provide a document or select a file.");
+                return;
+            }
+
+            // Upload file
+            const response = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            });
+            
+            handleUploadResponse(response);
+        });
+
+        async function handleUploadResponse(response) {
+            uploadBtn.disabled = true;
+            
+            if (response.ok) {
+                const data = await response.json();
+                uploadStatus.textContent = `✓ Document processed successfully! (${data.chunk_count} chunks)`;
+                uploadStatus.className = "status-message success";
+                
+                // Show QA section
+                qaSection.classList.remove("hidden");
+                chunkInfo.textContent = `Document contains ${data.chunk_count} text chunks. Start asking questions.`;
+                
+                // Clear inputs
+                textInput.value = "";
+                fileInput.value = "";
+            } else {
+                const data = await response.json();
+                showUploadError(data.error || "Upload failed.");
+            }
+            
+            uploadBtn.disabled = false;
+        }
+
+        function showUploadError(message) {
+            uploadStatus.textContent = `✗ ${message}`;
+            uploadStatus.className = "status-message error";
+        }
+
+        // Handle question submission
+        askBtn.addEventListener("click", async () => {
+            const question = questionInput.value.trim();
+            
+            if (!question) {
+                showError("Please enter a question.");
+                return;
+            }
+
+            clearMessages();
+            loadingSpinner.classList.remove("hidden");
+            askBtn.disabled = true;
+
+            try {
+                const response = await fetch("/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    answerContent.textContent = data.answer;
+                    answerBox.classList.remove("hidden");
+                } else {
+                    const data = await response.json();
+                    showError(data.error || "Failed to get answer.");
+                }
+            } catch (error) {
+                showError(`Network error: ${error.message}`);
+            } finally {
+                loadingSpinner.classList.add("hidden");
+                askBtn.disabled = false;
+            }
+        });
+
+        // Allow Enter key in question input
+        questionInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && !askBtn.disabled) {
+                askBtn.click();
+            }
+        });
+
+        function showError(message) {
+            errorBox.textContent = `✗ ${message}`;
+            errorBox.classList.remove("hidden");
+        }
+
+        function clearMessages() {
+            uploadStatus.textContent = "";
+            uploadStatus.className = "status-message";
+            answerBox.classList.add("hidden");
+            errorBox.classList.add("hidden");
+            answerContent.textContent = "";
+        }
+    </script>
+</body>
+</html>
+--- END FILE ---

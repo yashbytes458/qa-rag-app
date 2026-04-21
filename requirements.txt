@@ -1,0 +1,8 @@
+--- FILE: /qa_rag_app/requirements.txt ---
+flask==3.0.3
+openai==1.30.1
+faiss-cpu==1.8.0
+numpy==1.26.4
+pymupdf==1.24.5
+python-dotenv==1.0.1
+--- END FILE ---
